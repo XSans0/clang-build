@@ -20,7 +20,7 @@ msg "Building LLVM's ..."
     --no-update \
     --no-ccache \
     --quiet-cmake \
-    --targets "AArch64 ARM X86" \
+    --targets AArch64 ARM X86 \
     --use-good-revision \
     --vendor-string "WeebX"
 
