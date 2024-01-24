@@ -58,3 +58,101 @@ for bin in $(find install -mindepth 2 -maxdepth 3 -type f -exec file {} \; | gre
     echo "$bin"
     patchelf --set-rpath "$DIR/../lib" "$bin"
 done
+
+# Git config
+git config --global user.name "XSans0"
+git config --global user.email "xsansdroid@gmail.com"
+
+# Release Info
+pushd "$HOME_DIR"/src/llvm-project || exit
+llvm_commit="$(git rev-parse HEAD)"
+short_llvm_commit="$(cut -c-8 <<<"$llvm_commit")"
+popd || exit
+llvm_commit_url="https://github.com/llvm/llvm-project/commit/$short_llvm_commit"
+binutils_ver="$(ls | grep "$HOME_DIR/src/^binutils-" | sed "s/binutils-//g")"
+clang_version="$("$HOME_DIR"/install/bin/clang --version | head -n1 | cut -d' ' -f4)"
+build_date="$(TZ=Asia/Jakarta date +"%Y-%m-%d")"
+tags="WeebX-Clang-$clang_version-release"
+file="WeebX-Clang-$clang_version.tar.gz"
+clang_link="https://github.com/XSans0/WeebX-Clang/releases/download/$tags/$file"
+
+# Get simple info
+pushd "$HOME_DIR"/install || exit
+{
+    echo "# Quick Info
+* Build Date : $build_date
+* Clang Version : $clang_version
+* Binutils Version : $binutils_ver
+* Compiled Based : $llvm_commit_url"
+} >>README.md
+tar -czvf ../"$file" .
+popd || exit
+
+# Push
+git clone "https://XSans0:$GIT_TOKEN@github.com/XSans0/WeebX-Clang.git" rel_repo
+pushd rel_repo || exit
+if [ -d "$BRANCH" ]; then
+    echo "$clang_link" >"$BRANCH"/link.txt
+    cp -r "$HOME_DIR"/install/README.md "$BRANCH"
+else
+    mkdir -p "$BRANCH"
+    echo "$clang_link" >"$BRANCH"/link.txt
+    cp -r "$HOME_DIR"/install/README.md "$BRANCH"
+fi
+git add .
+git commit -asm "WeebX-Clang-$clang_version: $(TZ=Asia/Jakarta date +"%Y%m%d")"
+git push -f origin main
+
+# Check tags already exists or not
+overwrite=y
+git tag -l | grep "$tags" || overwrite=n
+popd || exit
+
+# Upload to github release
+failed=n
+if [ "$overwrite" == "y" ]; then
+    ./github-release edit \
+        --security-token "$GIT_TOKEN" \
+        --user "XSans0" \
+        --repo "WeebX-Clang" \
+        --tag "$tags" \
+        --description "$(cat "$HOME_DIR"/install/README.md)"
+
+    ./github-release upload \
+        --security-token "$GIT_TOKEN" \
+        --user "XSans0" \
+        --repo "WeebX-Clang" \
+        --tag "$tags" \
+        --name "$file" \
+        --file "$HOME_DIR/$file" \
+        --replace || failed=y
+else
+    ./github-release release \
+        --security-token "$GIT_TOKEN" \
+        --user "XSans0" \
+        --repo "WeebX-Clang" \
+        --tag "$tags" \
+        --description "$(cat "$HOME_DIR"/install/README.md)"
+
+    ./github-release upload \
+        --security-token "$GIT_TOKEN" \
+        --user "XSans0" \
+        --repo "WeebX-Clang" \
+        --tag "$tags" \
+        --name "$file" \
+        --file "$HOME_DIR/$file" || failed=y
+fi
+
+# Handle uploader if upload failed
+while [ "$failed" == "y" ]; do
+    failed=n
+    msg "Upload again"
+    ./github-release upload \
+        --security-token "$GIT_TOKEN" \
+        --user "XSans0" \
+        --repo "WeebX-Clang" \
+        --tag "$tags" \
+        --name "$file" \
+        --file "$HOME_DIR/$file" \
+        --replace || failed=y
+done
