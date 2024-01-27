@@ -20,8 +20,9 @@ msg "Building LLVM's ..."
     --no-update \
     --no-ccache \
     --quiet-cmake \
+    --ref "$BRANCH" \
+    --shallow-clone \
     --targets AArch64 ARM X86 \
-    --use-good-revision \
     --vendor-string "WeebX"
 
 # Check if the final clang binary exists or not
