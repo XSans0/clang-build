@@ -9,6 +9,13 @@ err(){
     echo -e "\e[1;41$*\e[0m"
 }
 
+# Environment checker
+msg "Checking environment ..."
+for environment in TELEGRAM_TOKEN TELEGRAM_CHAT GIT_TOKEN BRANCH; do
+    [ -z "${!environment}" ] && { err "- $environment not set!"; exit 1; }
+done
+msg "- All environment variables are set."
+
 # Get home directory
 HOME_DIR="$(pwd)"
 
