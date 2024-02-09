@@ -14,7 +14,7 @@ class BinutilsBuilder(Builder):
     def __init__(self):
         super().__init__()
 
-        self.cflags = ['-O2']
+        self.cflags = ['-O3']
         self.configure_flags = [
             '--disable-compressed-debug-sections',
             '--disable-gdb',
