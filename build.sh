@@ -45,7 +45,7 @@ send_file() {
 msg "Building LLVM's ..."
 send_msg "<b>Start build WeebX Clang from <code>[ $BRANCH ]</code> branch</b>"
 ./build-llvm.py \
-    --defines "LLVM_PARALLEL_COMPILE_JOBS=$(nproc) LLVM_PARALLEL_LINK_JOBS=$(nproc) CMAKE_C_FLAGS=-O3 CMAKE_CXX_FLAGS=-O3" \
+    --defines LLVM_PARALLEL_COMPILE_JOBS="$(nproc)" LLVM_PARALLEL_LINK_JOBS="$(nproc)" CMAKE_C_FLAGS=-O3 CMAKE_CXX_FLAGS=-O3 \
     --install-folder "$HOME_DIR/install" \
     --no-update \
     --no-ccache \
