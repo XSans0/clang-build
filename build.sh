@@ -2,17 +2,20 @@
 # Copyright ©2022-2024 XSans0
 
 # Function to show an informational message
-msg(){
+msg() {
     echo -e "\e[1;32m$*\e[0m"
 }
-err(){
+err() {
     echo -e "\e[1;41$*\e[0m"
 }
 
 # Environment checker
 msg "Checking environment ..."
 for environment in TELEGRAM_TOKEN TELEGRAM_CHAT GIT_TOKEN BRANCH; do
-    [ -z "${!environment}" ] && { err "- $environment not set!"; exit 1; }
+    [ -z "${!environment}" ] && {
+        err "- $environment not set!"
+        exit 1
+    }
 done
 msg "- All environment variables are set."
 
