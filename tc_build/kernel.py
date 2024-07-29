@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+from tempfile import NamedTemporaryFile
 import time
 
 from tc_build.builder import Builder
@@ -16,14 +17,14 @@ class KernelBuilder(Builder):
     # If the user supplies their own kernel source, it must be at least this
     # version to ensure that all the build commands work, as the build commands
     # were written to target at least this version.
-    MINIMUM_SUPPORTED_VERSION = (6, 5, 0)
+    MINIMUM_SUPPORTED_VERSION = (6, 9, 0)
 
     def __init__(self, arch):
         super().__init__()
 
         self.bolt_instrumentation = False
         self.bolt_sampling_output = None
-        self.config_targets = None
+        self.config_targets = []
         self.cross_compile = None
         self.make_variables = {
             'ARCH': arch,
@@ -60,6 +61,34 @@ class KernelBuilder(Builder):
             self.make_variables['LLVM_IAS'] = '0'
         self.make_variables['O'] = self.folders.build
 
+        self.clean_build_folder()
+
+        kconfig_allconfig = None
+        # allmodconfig enables CONFIG_WERROR and other subsystem specific
+        # -Werror configurations. Ensure all known configurations get disabled
+        # via KCONFIG_ALLCONFIG, as they may override KCFLAGS=-Werror.
+        if 'allmodconfig' in self.config_targets:
+            self.folders.build.mkdir(parents=True)
+
+            # Using a context manager for this would seriously convolute this
+            # code, as we need to use the name of the object in make_cmd but
+            # delete it after actually running the command so the rest of the
+            # code after this function would need another level of indent. We
+            # know that from this point forward, the function can only throw an
+            # exception when calling make_cmd, so we can just wrap that in a
+            # try: ... finally: ... statement to ensure that this file is
+            # always cleaned up.
+            # pylint: disable-next=consider-using-with
+            kconfig_allconfig = NamedTemporaryFile(dir=self.folders.build)
+
+            configs_to_disable = ['DRM_WERROR', 'WERROR']
+            kconfig_allconfig_text = ''.join(f"CONFIG_{val}=n\n"
+                                             for val in configs_to_disable).encode('utf-8')
+
+            kconfig_allconfig.write(kconfig_allconfig_text)
+            kconfig_allconfig.seek(0)
+            self.make_variables['KCONFIG_ALLCONFIG'] = kconfig_allconfig.name
+
         make_cmd = []
         if self.bolt_sampling_output:
             make_cmd += [
@@ -77,9 +106,12 @@ class KernelBuilder(Builder):
         # Ideally, the kernel would always clobber user flags via ':=' but we deal with reality.
         os.environ.pop('CFLAGS', '')
 
-        self.clean_build_folder()
         build_start = time.time()
-        self.run_cmd(make_cmd)
+        try:
+            self.run_cmd(make_cmd)
+        finally:
+            if kconfig_allconfig:
+                kconfig_allconfig.close()
         tc_build.utils.print_info(f"Build duration: {tc_build.utils.get_duration(build_start)}")
 
     def can_use_ias(self):
@@ -258,12 +290,6 @@ class S390KernelBuilder(KernelBuilder):
 
         self.cross_compile = 's390x-linux-gnu-'
 
-        # LD: https://github.com/ClangBuiltLinux/linux/issues/1524
-        # OBJCOPY: https://github.com/ClangBuiltLinux/linux/issues/1530
-        # OBJDUMP: https://github.com/ClangBuiltLinux/linux/issues/859
-        for key in ['LD', 'OBJCOPY', 'OBJDUMP']:
-            self.make_variables[key] = self.cross_compile + key.lower()
-
     def build(self):
         self.toolchain_version = self.get_toolchain_version()
         if self.toolchain_version <= (15, 0, 0):
@@ -272,13 +298,40 @@ class S390KernelBuilder(KernelBuilder):
                 's390 does not build with LLVM < 15.0.0, skipping build...')
             return
 
+        # LD: https://github.com/ClangBuiltLinux/linux/issues/1524
+        # OBJCOPY: https://github.com/ClangBuiltLinux/linux/issues/1530
+        gnu_vars = []
+
+        # https://github.com/llvm/llvm-project/pull/75643
+        lld_res = subprocess.run([Path(self.toolchain_prefix, 'bin/ld.lld'), '-m', 'elf64_s390'],
+                                 capture_output=True,
+                                 check=False,
+                                 text=True)
+        if 'error: unknown emulation:' in lld_res.stderr:
+            gnu_vars.append('LD')
+
+        # https://github.com/llvm/llvm-project/pull/81841
+        objcopy_res = subprocess.run([
+            Path(self.toolchain_prefix, 'bin/llvm-objcopy'), '-I', 'binary', '-O', 'elf64-s390',
+            '-', '/dev/null'
+        ],
+                                     capture_output=True,
+                                     check=False,
+                                     input='',
+                                     text=True)
+        if 'error: invalid output format:' in objcopy_res.stderr:
+            gnu_vars.append('OBJCOPY')
+
+        for key in gnu_vars:
+            self.make_variables[key] = self.cross_compile + key.lower()
+
         super().build()
 
     def can_use_ias(self):
         return True
 
     def needs_binutils(self):
-        return True
+        return 'LD' in self.make_variables or 'OBJCOPY' in self.make_variables
 
 
 class X8664KernelBuilder(KernelBuilder):
@@ -406,7 +459,10 @@ class LinuxSourceManager(SourceManager):
                 # been applied.
                 if 'Reversed (or previously applied) patch detected' in err.stdout:
                     tc_build.utils.print_warning(
-                        f"Patch ('{patch}') has already been applied, consider removing it")
+                        f"{patch} has already been applied in {self.location}, consider removing it"
+                    )
                 else:
                     raise err
-        tc_build.utils.print_info(f"Source sucessfully prepared in {self.location}")
+            else:
+                tc_build.utils.print_info(f"Applied {patch} to {self.location}")
+        tc_build.utils.print_info(f"Source successfully prepared in {self.location}")
