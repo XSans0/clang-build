@@ -56,7 +56,7 @@ send_msg "<b>Start build WeebX Clang from <code>[ $BRANCH ]</code> branch</b>"
     --vendor-string "WeebX"
 
 # Check if the final clang binary exists or not
-for file in install/bin/clang-1*; do
+for file in install/bin/clang-[1-9]*; do
     if [ -e "$file" ]; then
         msg "LLVM's build successful"
     else
