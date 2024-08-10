@@ -17,7 +17,6 @@ for environment in TELEGRAM_TOKEN TELEGRAM_CHAT GIT_TOKEN BRANCH; do
         exit 1
     }
 done
-msg "- All environment variables are set."
 
 # Get home directory
 HOME_DIR="$(pwd)"
@@ -42,7 +41,7 @@ send_file() {
 }
 
 # Building LLVM's
-msg "Building LLVM's ..."
+msg "Building LLVM ..."
 send_msg "<b>Start build WeebX Clang from <code>[ $BRANCH ]</code> branch</b>"
 ./build-llvm.py \
     --defines LLVM_PARALLEL_COMPILE_JOBS="$(nproc)" LLVM_PARALLEL_LINK_JOBS="$(nproc)" CMAKE_C_FLAGS=-O3 CMAKE_CXX_FLAGS=-O3 \
@@ -58,10 +57,10 @@ send_msg "<b>Start build WeebX Clang from <code>[ $BRANCH ]</code> branch</b>"
 # Check if the final clang binary exists or not
 for file in install/bin/clang-[1-9]*; do
     if [ -e "$file" ]; then
-        msg "LLVM's build successful"
+        msg "LLVM build successful"
     else
-        err "LLVM's build failed!"
-        send_msg "LLVM's build failed!"
+        err "LLVM build failed!"
+        send_msg "LLVM build failed!"
         exit
     fi
 done
